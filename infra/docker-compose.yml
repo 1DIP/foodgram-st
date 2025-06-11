@@ -24,6 +24,7 @@ services:
 
   frontend:
     container_name: foodgram-front
+    image: falllakeror/foodgram-backend:latest
     build: ../frontend
     volumes:
       - ../frontend/:/app/result_build/
