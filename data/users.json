@@ -1,0 +1,7 @@
+[
+  {"email": "user1@test.com", "username": "chef_master", "first_name": "Анна", "last_name": "Петрова", "password": "cooking2024", "avatar":  null, "is_superuser": false, "is_staff": false},
+  {"email": "user2@test.com", "username": "food_lover", "first_name": "Сергей", "last_name": "Кузнецов", "password": "recipes123", "avatar":  null, "is_superuser": false, "is_staff": false},
+  {"email": "user3@test.com", "username": "baker_pro", "first_name": "Елена", "last_name": "Морозова", "password": "bakery456", "avatar":  null, "is_superuser": false, "is_staff": false},
+  {"email": "user4@test.com", "username": "kitchen_king", "first_name": "Максим", "last_name": "Волков", "password": "kitchen789", "avatar":  null, "is_superuser": false, "is_staff": false},
+  {"email": "admin@test.com", "username": "foodgram_admin", "first_name": "Администратор", "last_name": "Системы", "password": "admin2025", "avatar":  null, "is_superuser": true, "is_staff": true}
+]
