@@ -250,7 +250,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
         recipe_names = {}
 
         for item in (request.user.shoppingcarts.all()
-                .select_related('recipe')):
+                     .select_related('recipe')):
             recipe_names[item.recipe.name] = item.recipe.author.username
             for ingredient_in_recipe in item.recipe.recipe_ingredients.all():
                 key = (
