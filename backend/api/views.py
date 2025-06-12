@@ -166,12 +166,13 @@ class UserViewSet(DjoserUserViewSet):
             subscription.author for subscription in paginated_subscriptions
         ]
 
-        serializer = UserWithRecipesSerializer(
-            authors,
-            many=True,
-            context={'request': request}
+        return paginator.get_paginated_response(
+            UserWithRecipesSerializer(
+                authors,
+                many=True,
+                context={'request': request}
+            ).data
         )
-        return paginator.get_paginated_response(serializer.data)
 
 
 class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
