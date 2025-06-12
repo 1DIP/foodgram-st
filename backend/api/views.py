@@ -28,7 +28,6 @@ from .serializers import (
     RecipeSerializer,
     ShortRecipeSerializer,
     UserWithRecipesSerializer,
-    SubscriptionSerializer,
     UserSerializer
 )
 
@@ -37,7 +36,8 @@ class IsAuthorOrReadOnly:
     """Права доступа для автора или только чтение"""
 
     def has_object_permission(self, request, view, obj):
-        return request.method in ['GET', 'HEAD', 'OPTIONS'] or obj.author == request.user
+        return (request.method in ['GET', 'HEAD', 'OPTIONS']
+                or obj.author == request.user)
 
 
 class UserViewSet(DjoserUserViewSet):
@@ -124,7 +124,8 @@ class UserViewSet(DjoserUserViewSet):
 
             return Response(
                 UserWithRecipesSerializer(
-                    author, context={'request': request}).data,
+                    author, context={'request': request}
+                ).data,
                 status=status.HTTP_201_CREATED
             )
 
@@ -137,7 +138,6 @@ class UserViewSet(DjoserUserViewSet):
             raise ValidationError({'errors': 'Подписка не найдена'})
 
         subscription.delete()
-
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(
@@ -224,13 +224,16 @@ class RecipeViewSet(viewsets.ModelViewSet):
         """Проверка прав на обновление рецепта"""
         if serializer.instance.author != self.request.user:
             raise PermissionDenied(
-                'Вы можете редактировать только свои рецепты')
+                'Вы можете редактировать только свои рецепты'
+            )
         serializer.save()
 
     def perform_destroy(self, instance):
         """Проверка прав на удаление рецепта"""
         if instance.author != self.request.user:
-            raise PermissionDenied('Вы можете удалять только свои рецепты')
+            raise PermissionDenied(
+                'Вы можете удалять только свои рецепты'
+            )
         instance.delete()
 
     @staticmethod
@@ -353,7 +356,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'], url_path='get-link')
     def get_short_link(self, request, pk=None):
         """Получение короткой ссылки на рецепт"""
-        recipe = get_object_or_404(Recipe, pk=pk)
+        get_object_or_404(Recipe, pk=pk)
         short_link = request.build_absolute_uri(
             reverse('recipes:recipe-short-link', args=[pk])
         )

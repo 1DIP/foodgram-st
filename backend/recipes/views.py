@@ -10,5 +10,5 @@ class RecipeShortLinkView(APIView):
 
     def get(self, request, pk):
         """Редирект на полную ссылку рецепта"""
-        recipe = Recipe.objects.get(pk=pk)
+        Recipe.objects.get(pk=pk)
         return redirect(reverse('recipes-detail', args=[pk]))

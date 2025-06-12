@@ -1,5 +1,9 @@
-from djoser.serializers import UserSerializer as DjoserUserSerializer
-from djoser.serializers import UserCreateSerializer as DjoserUserCreateSerializer
+from djoser.serializers import (
+    UserSerializer as DjoserUserSerializer
+)
+from djoser.serializers import (
+    UserCreateSerializer as DjoserUserCreateSerializer
+)
 from drf_extra_fields.fields import Base64ImageField
 from rest_framework import serializers
 import re
@@ -33,19 +37,19 @@ class UserCreateSerializer(DjoserUserCreateSerializer):
     def validate_username(self, value):
         if not re.match(r'^[\w.@+-]+$', value):
             raise serializers.ValidationError(
-                'Username может содержать только буквы, цифры и символы: @ . + -'
+                'Username может содержать только буквы, '
+                'цифры и символы: @ . + -'
             )
         return value
 
     def to_representation(self, instance):
-        data = {
+        return {
             'email': instance.email,
             'id': instance.id,
             'username': instance.username,
             'first_name': instance.first_name,
             'last_name': instance.last_name,
         }
-        return data
 
 
 class UserSerializer(DjoserUserSerializer):
