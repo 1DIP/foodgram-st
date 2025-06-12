@@ -23,7 +23,9 @@ class CustomUserAdmin(UserAdmin):
 
     def get_avatar_preview(self, obj):
         if obj.avatar:
-            return mark_safe(f'<img src="{obj.avatar.url}" width="50" height="50" />')
+            return mark_safe(
+                f'<img src="{obj.avatar.url}" width="50" height="50" />'
+            )
         return 'Нет аватара'
     get_avatar_preview.short_description = 'Аватар'
 
@@ -78,14 +80,17 @@ class RecipeAdmin(admin.ModelAdmin):
     def get_ingredients_list(self, obj):
         ingredients = obj.recipe_ingredients.all()
         return mark_safe('<br>'.join([
-            f'{ing.ingredient.name} - {ing.amount} {ing.ingredient.measurement_unit}'
+            f'{ing.ingredient.name} - {ing.amount} '
+            f'{ing.ingredient.measurement_unit}'
             for ing in ingredients
         ]))
     get_ingredients_list.short_description = 'Ингредиенты'
 
     def get_image_preview(self, obj):
         if obj.image:
-            return mark_safe(f'<img src="{obj.image.url}" width="50" height="50" />')
+            return mark_safe(
+                f'<img src="{obj.image.url}" width="50" height="50" />'
+            )
         return 'Нет изображения'
     get_image_preview.short_description = 'Изображение'
 
