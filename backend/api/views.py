@@ -344,8 +344,9 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
         for num, ingredient in enumerate(ingredients_data, start=1):
             name = ingredient['recipe__recipe_ingredients__ingredient__name']
-            unit = ingredient['recipe__recipe_ingredients__' + 
-                              'ingredient__measurement_unit']
+            unit = ingredient[
+                'recipe__recipe_ingredients__ingredient__measurement_unit'
+            ]
             amount = ingredient['total_amount']
             report_lines.append(
                 f'{num}. '
