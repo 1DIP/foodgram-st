@@ -1,3 +1,4 @@
+from django.db.models import Sum
 from django.http import FileResponse
 from django.utils import timezone
 from djoser.views import UserViewSet as DjoserUserViewSet
@@ -15,6 +16,7 @@ from rest_framework.exceptions import ValidationError, PermissionDenied
 from rest_framework.generics import get_object_or_404
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import (
+    BasePermission,
     IsAuthenticated,
     IsAuthenticatedOrReadOnly
 )
@@ -32,12 +34,26 @@ from .serializers import (
 )
 
 
-class IsAuthorOrReadOnly:
+class IsAuthorOrReadOnly(BasePermission):
     """Права доступа для автора или только чтение"""
 
+    def has_permission(self, request, view):
+        """Базовая проверка прав доступа"""
+        # Разрешаем чтение всем
+        if request.method in ['GET', 'HEAD', 'OPTIONS']:
+            return True
+
+        # Для записи требуется аутентификация
+        return request.user and request.user.is_authenticated
+
     def has_object_permission(self, request, view, obj):
-        return (request.method in ['GET', 'HEAD', 'OPTIONS']
-                or obj.author == request.user)
+        """Проверка прав доступа к конкретному объекту"""
+        # Разрешаем чтение всем
+        if request.method in ['GET', 'HEAD', 'OPTIONS']:
+            return True
+
+        # Для записи проверяем, что пользователь является автором
+        return obj.author == request.user
 
 
 class UserViewSet(DjoserUserViewSet):
@@ -129,10 +145,7 @@ class UserViewSet(DjoserUserViewSet):
                 status=status.HTTP_201_CREATED
             )
 
-        subscription = Subscription.objects.filter(
-            user=request.user,
-            author=author
-        ).first()
+        subscription = request.user.subscriptions.filter(author=author).first()
 
         if not subscription:
             raise ValidationError({'errors': 'Подписка не найдена'})
@@ -150,13 +163,14 @@ class UserViewSet(DjoserUserViewSet):
         """Список подписок пользователя"""
 
         user = request.user
+        # Исправлено: используем правильный related_name
         subscriptions = (
-            user.users.all()
+            user.subscriptions.all()
             .select_related('author')
         )
 
         paginator = PageNumberPagination()
-        paginator.page_size = request.query_params.get('limit', 6)
+        paginator.page_size = int(request.query_params.get('limit', 6))
         paginated_subscriptions = paginator.paginate_queryset(
             subscriptions,
             request
@@ -195,7 +209,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
     queryset = Recipe.objects.all()
     serializer_class = RecipeSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
+    permission_classes = [IsAuthenticatedOrReadOnly, IsAuthorOrReadOnly]
     pagination_class = CustomPagePagination
 
     def get_queryset(self):
@@ -220,22 +234,6 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Установка автора рецепта"""
         serializer.save(author=self.request.user)
-
-    def perform_update(self, serializer):
-        """Проверка прав на обновление рецепта"""
-        if serializer.instance.author != self.request.user:
-            raise PermissionDenied(
-                'Вы можете редактировать только свои рецепты'
-            )
-        serializer.save()
-
-    def perform_destroy(self, instance):
-        """Проверка прав на удаление рецепта"""
-        if instance.author != self.request.user:
-            raise PermissionDenied(
-                'Вы можете удалять только свои рецепты'
-            )
-        instance.delete()
 
     @staticmethod
     def handle_recipe_action(request, recipe, model):
@@ -301,23 +299,33 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def download_shopping_list(self, request):
         """Скачивание списка покупок"""
 
-        ingredient_totals = {}
-        recipe_names = {}
+        # Получаем агрегированные данные одним запросом
+        ingredients_data = (
+            request.user.shoppingcarts
+            .select_related('recipe__author')
+            .prefetch_related('recipe__recipe_ingredients__ingredient')
+            .values(
+                'recipe__recipe_ingredients__ingredient__name',
+                'recipe__recipe_ingredients__ingredient__measurement_unit'
+            )
+            .annotate(
+                total_amount=Sum('recipe__recipe_ingredients__amount')
+            )
+            .order_by('recipe__recipe_ingredients__ingredient__name')
+        )
 
-        for item in (request.user.shoppingcarts.all()
-                     .select_related('recipe')):
-            recipe_names[item.recipe.name] = item.recipe.author.username
-            for ingredient_in_recipe in item.recipe.recipe_ingredients.all():
-                key = (
-                    ingredient_in_recipe.ingredient.name,
-                    ingredient_in_recipe.ingredient.measurement_unit
-                )
-                ingredient_totals[key] = (ingredient_totals.get(key, 0)
-                                          + ingredient_in_recipe.amount)
+        # Получаем рецепты одним запросом
+        recipes_data = (
+            request.user.shoppingcarts
+            .select_related('recipe__author')
+            .values('recipe__name', 'recipe__author__username')
+            .distinct()
+            .order_by('recipe__name')
+        )
 
         report_text = self.create_shopping_report(
-            ingredient_totals,
-            recipe_names,
+            ingredients_data,
+            recipes_data,
             timezone.now().strftime('%d.%m.%Y')
         )
 
@@ -327,27 +335,26 @@ class RecipeViewSet(viewsets.ModelViewSet):
             filename='shopping_list.txt'
         )
 
-    def create_shopping_report(self, ingredient_totals, recipe_names, date):
+    def create_shopping_report(self, ingredients_data, recipes_data, date):
         """Формирование отчета списка покупок"""
         report_lines = [
             f'Список покупок от {date}:',
             'Ингредиенты:',
         ]
 
-        for num, ((name, unit), amount) in enumerate(
-            sorted(ingredient_totals.items(), key=lambda x: x[0]),
-            start=1
-        ):
+        for num, ingredient in enumerate(ingredients_data, start=1):
+            name = ingredient['recipe__recipe_ingredients__ingredient__name']
+            unit = ingredient['recipe__recipe_ingredients__ingredient__measurement_unit']
+            amount = ingredient['total_amount']
             report_lines.append(
                 f'{num}. '
                 f'{name.capitalize()} ({unit}) - {amount}'
             )
 
         report_lines.append('\nРецепты:')
-        for num, (recipe_name, author) in enumerate(
-            sorted(recipe_names.items()),
-            start=1
-        ):
+        for num, recipe in enumerate(recipes_data, start=1):
+            recipe_name = recipe['recipe__name']
+            author = recipe['recipe__author__username']
             report_lines.append(
                 f'{num}. {recipe_name} (от: {author})'
             )

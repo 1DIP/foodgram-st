@@ -17,12 +17,22 @@ from recipes.models import (
     Subscription,
 )
 
+# Константы
+NAME_MAX_LENGTH = 150
+EMAIL_MAX_LENGTH = 254
+RECIPE_NAME_MAX_LENGTH = 256
+MIN_VALUE = 1
+MAX_VALUE = 32000
+DEFAULT_RECIPES_LIMIT = 100
+
 
 class UserCreateSerializer(DjoserUserCreateSerializer):
-    first_name = serializers.CharField(required=True, max_length=150)
-    last_name = serializers.CharField(required=True, max_length=150)
-    username = serializers.CharField(required=True, max_length=150)
-    email = serializers.EmailField(required=True, max_length=254)
+    first_name = serializers.CharField(
+        required=True, max_length=NAME_MAX_LENGTH)
+    last_name = serializers.CharField(
+        required=True, max_length=NAME_MAX_LENGTH)
+    username = serializers.CharField(required=True, max_length=NAME_MAX_LENGTH)
+    email = serializers.EmailField(required=True, max_length=EMAIL_MAX_LENGTH)
 
     class Meta(DjoserUserCreateSerializer.Meta):
         fields = (
@@ -43,13 +53,19 @@ class UserCreateSerializer(DjoserUserCreateSerializer):
         return value
 
     def to_representation(self, instance):
-        return {
-            'email': instance.email,
-            'id': instance.id,
-            'username': instance.username,
-            'first_name': instance.first_name,
-            'last_name': instance.last_name,
-        }
+        # Проверяем, что instance является объектом User
+        if hasattr(instance, 'email'):
+            return {
+                'email': instance.email,
+                'id': instance.id,
+                'username': instance.username,
+                'first_name': instance.first_name,
+                'last_name': instance.last_name,
+            }
+
+        # Если это не объект User (например, при валидации),
+        # используем стандартную логику
+        return super().to_representation(instance)
 
 
 class UserSerializer(DjoserUserSerializer):
@@ -72,10 +88,7 @@ class UserSerializer(DjoserUserSerializer):
         user = request.user
         if not user.is_authenticated:
             return False
-        return Subscription.objects.filter(
-            author=obj,
-            user=user
-        ).exists()
+        return user.subscriptions.filter(author=obj).exists()
 
 
 class AvatarSerializer(serializers.ModelSerializer):
@@ -106,7 +119,7 @@ class IngredientInRecipeSerializer(serializers.ModelSerializer):
     measurement_unit = serializers.ReadOnlyField(
         source='ingredient.measurement_unit'
     )
-    amount = serializers.IntegerField(min_value=1)
+    amount = serializers.IntegerField(min_value=MIN_VALUE, max_value=MAX_VALUE)
 
     class Meta:
         model = IngredientInRecipe
@@ -123,9 +136,11 @@ class RecipeSerializer(serializers.ModelSerializer):
     is_favorited = serializers.SerializerMethodField()
     is_in_shopping_cart = serializers.SerializerMethodField()
     image = Base64ImageField(required=True)
-    name = serializers.CharField(max_length=256, required=True)
+    name = serializers.CharField(
+        max_length=RECIPE_NAME_MAX_LENGTH, required=True)
     text = serializers.CharField(required=True)
-    cooking_time = serializers.IntegerField(min_value=1, required=True)
+    cooking_time = serializers.IntegerField(
+        min_value=MIN_VALUE, max_value=MAX_VALUE, required=True)
 
     class Meta:
         model = Recipe
@@ -141,6 +156,14 @@ class RecipeSerializer(serializers.ModelSerializer):
             'is_in_shopping_cart',
         )
 
+    def validate_image(self, value):
+        """Валидация изображения"""
+        if not value:
+            raise serializers.ValidationError(
+                'Изображение обязательно для заполнения'
+            )
+        return value
+
     def validate_ingredients(self, value):
         if not value:
             raise serializers.ValidationError(
@@ -153,13 +176,6 @@ class RecipeSerializer(serializers.ModelSerializer):
                 'Ингредиенты не должны повторяться'
             )
 
-        return value
-
-    def validate_image(self, value):
-        if not value:
-            raise serializers.ValidationError(
-                'Необходимо добавить изображение'
-            )
         return value
 
     def validate_name(self, value):
@@ -245,9 +261,10 @@ class UserWithRecipesSerializer(UserSerializer):
 
     def get_recipes(self, obj):
         request = self.context.get('request')
-        recipes_limit = 10**10
+        recipes_limit = DEFAULT_RECIPES_LIMIT
         if request:
-            recipes_limit = int(request.GET.get('recipes_limit', 10**10))
+            recipes_limit = int(request.GET.get(
+                'recipes_limit', DEFAULT_RECIPES_LIMIT))
         return ShortRecipeSerializer(
             obj.recipes.all()[:recipes_limit],
             many=True

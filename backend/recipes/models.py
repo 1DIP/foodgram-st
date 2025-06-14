@@ -1,6 +1,15 @@
 from django.contrib.auth.models import AbstractUser
-from django.core.validators import RegexValidator, MinValueValidator
+from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.db import models
+
+# Константы
+NAME_MAX_LENGTH = 150
+EMAIL_MAX_LENGTH = 254
+INGREDIENT_NAME_MAX_LENGTH = 128
+MEASUREMENT_UNIT_MAX_LENGTH = 64
+RECIPE_NAME_MAX_LENGTH = 256
+MIN_VALUE = 1
+MAX_VALUE = 32000
 
 
 class User(AbstractUser):
@@ -8,11 +17,11 @@ class User(AbstractUser):
 
     email = models.EmailField(
         unique=True,
-        max_length=254
+        max_length=EMAIL_MAX_LENGTH
     )
 
     username = models.CharField(
-        max_length=150,
+        max_length=NAME_MAX_LENGTH,
         unique=True,
         validators=[RegexValidator(
             regex=r'^[\w.@+-]+$',
@@ -22,12 +31,12 @@ class User(AbstractUser):
     )
 
     first_name = models.CharField(
-        max_length=150,
+        max_length=NAME_MAX_LENGTH,
         blank=False,
     )
 
     last_name = models.CharField(
-        max_length=150,
+        max_length=NAME_MAX_LENGTH,
         blank=False,
     )
 
@@ -55,25 +64,26 @@ class Subscription(models.Model):
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='users',
+        related_name='subscriptions',
         verbose_name='Подписчик'
     )
     author = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='authors',
+        related_name='subscribers',
         verbose_name='Автор'
     )
 
     class Meta:
+        verbose_name = 'Подписка'
+        verbose_name_plural = 'Подписки'
+        ordering = ('user',)
         constraints = [
             models.UniqueConstraint(
                 fields=['user', 'author'],
                 name='unique_user_author'
             )
         ]
-        verbose_name = 'Подписка'
-        verbose_name_plural = 'Подписки'
 
     def __str__(self):
         return f'{self.user} подписан на {self.author}'
@@ -83,24 +93,24 @@ class Ingredient(models.Model):
     """Ингредиенты для рецептов"""
     name = models.CharField(
         verbose_name='Название',
-        max_length=128
+        max_length=INGREDIENT_NAME_MAX_LENGTH
     )
 
     measurement_unit = models.CharField(
         verbose_name='Единица измерения',
-        max_length=64
+        max_length=MEASUREMENT_UNIT_MAX_LENGTH
     )
 
     class Meta:
         verbose_name = 'Ингредиент'
         verbose_name_plural = 'Ингредиенты'
+        ordering = ('name',)
         constraints = [
             models.UniqueConstraint(
                 fields=['name', 'measurement_unit'],
                 name='unique_ingredient_unit'
             )
         ]
-        ordering = ('name',)
 
     def __str__(self):
         return f'{self.name} ({self.measurement_unit})'
@@ -111,7 +121,7 @@ class Recipe(models.Model):
 
     name = models.CharField(
         verbose_name='Название',
-        max_length=256
+        max_length=RECIPE_NAME_MAX_LENGTH
     )
 
     text = models.TextField(
@@ -134,11 +144,14 @@ class Recipe(models.Model):
         verbose_name='Автор'
     )
 
-    cooking_time = models.IntegerField(
+    cooking_time = models.PositiveSmallIntegerField(
         verbose_name='Время приготовления (мин)',
         validators=[
             MinValueValidator(
-                1, 'Время приготовления должно быть больше 0'
+                MIN_VALUE, 'Время приготовления должно быть больше 0'
+            ),
+            MaxValueValidator(
+                MAX_VALUE, 'Время приготовления не должно превышать 32000'
             )
         ]
     )
@@ -173,24 +186,31 @@ class IngredientInRecipe(models.Model):
         verbose_name='Ингредиент'
     )
 
-    amount = models.IntegerField(
+    amount = models.PositiveSmallIntegerField(
         verbose_name='Количество',
-        validators=[MinValueValidator(
-            1,
-            'Количество должно быть больше 0'
-        )]
+        validators=[
+            MinValueValidator(
+                MIN_VALUE,
+                'Количество должно быть больше 0'
+            ),
+            MaxValueValidator(
+                MAX_VALUE,
+                'Количество не должно превышать 32000'
+            )
+        ]
     )
 
     class Meta:
         verbose_name = 'Ингредиент в рецепте'
         verbose_name_plural = 'Ингредиенты в рецептах'
+        ordering = ('recipe',)
+        default_related_name = 'recipe_ingredients'
         constraints = [
             models.UniqueConstraint(
                 fields=['recipe', 'ingredient'],
                 name='unique_recipe_ingredient_pair'
             )
         ]
-        default_related_name = 'recipe_ingredients'
 
     def __str__(self):
         return (f'{self.ingredient.name} - {self.amount} '
@@ -215,6 +235,7 @@ class RecipeUserBase(models.Model):
 
     class Meta:
         abstract = True
+        ordering = ('user',)
         constraints = [
             models.UniqueConstraint(
                 fields=['user', 'recipe'],
@@ -229,7 +250,7 @@ class RecipeUserBase(models.Model):
 class Favorite(RecipeUserBase):
     """Избранные рецепты"""
 
-    class Meta:
+    class Meta(RecipeUserBase.Meta):
         verbose_name = 'Избранный рецепт'
         verbose_name_plural = 'Избранные рецепты'
 
@@ -237,6 +258,6 @@ class Favorite(RecipeUserBase):
 class ShoppingCart(RecipeUserBase):
     """Список покупок"""
 
-    class Meta:
+    class Meta(RecipeUserBase.Meta):
         verbose_name = 'Рецепт в корзине'
         verbose_name_plural = 'Рецепты в корзине'
